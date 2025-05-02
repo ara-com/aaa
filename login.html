@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login & Sign Up</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .container {
+      max-width: 400px;
+      margin: auto;
+    }
+    input, button {
+      display: block;
+      margin: 10px 0;
+      padding: 10px;
+      width: 100%;
+    }
+    #message {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 id="formTitle">Login</h2>
+
+    <form id="authForm">
+      <div id="extraFields" style="display: none;">
+        <input type="text" id="name" placeholder="Full Name" />
+        <input type="text" id="designation" placeholder="Designation" />
+      </div>
+
+      <input type="email" id="email" placeholder="Email" required />
+      <input type="password" id="password" placeholder="Password" required />
+      <button type="submit" id="authButton">Login</button>
+    </form>
+
+    <p id="message"></p>
+
+    <p id="switchMessage">
+      Don't have an account? <a href="#" id="switchToggle">Sign Up</a>
+    </p>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyBlUekdwgQCyU1_Ul3Z8h0YYXmtbcfbEv8",
+      authDomain: "atten-969e6.firebaseapp.com",
+      projectId: "atten-969e6",
+      storageBucket: "atten-969e6.appspot.com",
+      messagingSenderId: "112657329201",
+      appId: "1:112657329201:web:b14765b4f82ad433a0b910",
+      measurementId: "G-YQJ7L8X93S"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Elements
+    const authForm = document.getElementById("authForm");
+    const authButton = document.getElementById("authButton");
+    const formTitle = document.getElementById("formTitle");
+    const switchMessage = document.getElementById("switchMessage");
+    const messageDisplay = document.getElementById("message");
+    const extraFields = document.getElementById("extraFields");
+
+    let isSignUp = false;
+
+    function updateMode() {
+      isSignUp = !isSignUp;
+      formTitle.textContent = isSignUp ? "Sign Up" : "Login";
+      authButton.textContent = isSignUp ? "Sign Up" : "Login";
+      extraFields.style.display = isSignUp ? "block" : "none";
+
+      switchMessage.innerHTML = isSignUp
+        ? `Already have an account? <a href="#" id="switchToggle">Login</a>`
+        : `Don't have an account? <a href="#" id="switchToggle">Sign Up</a>`;
+
+      document.getElementById("switchToggle").addEventListener("click", (e) => {
+        e.preventDefault();
+        updateMode();
+      });
+    }
+
+    updateMode(); // initialize toggle
+
+    authForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      messageDisplay.textContent = "";
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      if (isSignUp) {
+        const name = document.getElementById("name").value.trim();
+        const designation = document.getElementById("designation").value.trim();
+
+        if (!name || !designation) {
+          messageDisplay.textContent = "Please fill all fields.";
+          return;
+        }
+
+        try {
+          const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+          const uid = userCredential.user.uid;
+          await db.collection("employees").doc(uid).set({ name, designation, email });
+          localStorage.setItem("uid", uid);
+          window.location.href = "index.html";
+        } catch (error) {
+          messageDisplay.textContent = error.message;
+        }
+      } else {
+        try {
+          const userCredential = await auth.signInWithEmailAndPassword(email, password);
+          localStorage.setItem("uid", userCredential.user.uid);
+          window.location.href = "index.html";
+        } catch (error) {
+          messageDisplay.textContent = error.message;
+        }
+      }
+    });
+  </script>
+</body>
+</html>

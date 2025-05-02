@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Owner Panel</title>
+  <link rel="stylesheet" href="owner.css" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #addForm {
+      display: none;
+      margin: 20px 0;
+    }
+    input, button {
+      margin: 5px 0;
+      padding: 8px;
+      width: 200px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+    }
+    #downloadBtn {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Owner Panel</h2>
+
+  
+  <button id="downloadBtn">Download Attendance (Excel)</button>
+
+  <form id="addForm">
+    <input placeholder="Name" id="name" required />
+    <input placeholder="Designation" id="designation" required />
+    <input type="date" id="doj" required />
+    <button type="submit">Add</button>
+  </form>
+
+  <h3>Attendance Records</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Designation</th>
+        <th>Date</th>
+        <th>Time</th>
+        <th>Valid Location</th>
+      </tr>
+    </thead>
+    <tbody id="attendanceBody"></tbody>
+  </table>
+
+  <!-- Firebase scripts -->
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBlUekdwgQCyU1_Ul3Z8h0YYXmtbcfbEv8",
+      authDomain: "atten-969e6.firebaseapp.com",
+      projectId: "atten-969e6",
+      storageBucket: "atten-969e6.firebasestorage.app",
+      messagingSenderId: "112657329201",
+      appId: "1:112657329201:web:b14765b4f82ad433a0b910",
+      measurementId: "G-YQJ7L8X93S"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const form = document.getElementById("addForm");
+    const attendanceBody = document.getElementById("attendanceBody");
+
+    function toggleForm() {
+      form.style.display = form.style.display === "none" ? "block" : "none";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value;
+      const designation = document.getElementById("designation").value;
+      const doj = document.getElementById("doj").value;
+
+      try {
+        const user = firebase.auth().currentUser;
+        if (user) {
+          await db.collection("employees").doc(user.uid).set({ name, designation, doj });
+          alert("Employee added!");
+          form.reset();
+          form.style.display = "none";
+        } else {
+          alert("You must be logged in to add employees.");
+        }
+      } catch (err) {
+        alert("Error adding employee: " + err.message);
+      }
+    });
+
+    function formatTime(time) {
+      if (!time) return "-";
+      if (typeof time.toDate === "function") {
+        const dateObj = time.toDate();
+        return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      if (typeof time === "string" || typeof time === "number") {
+        try {
+          const dateObj = new Date(time);
+          return isNaN(dateObj.getTime()) ? time : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch {
+          return time;
+        }
+      }
+      return "-";
+    }
+
+    async function loadAttendance() {
+      attendanceBody.innerHTML = "";
+      try {
+        const attendanceSnap = await db.collection("attendance").orderBy("date", "desc").get();
+        if (attendanceSnap.empty) {
+          attendanceBody.innerHTML = `<tr><td colspan="5">No attendance records found.</td></tr>`;
+          return;
+        }
+
+        for (const doc of attendanceSnap.docs) {
+          const entry = doc.data();
+          let empName = "Unknown";
+          let empDesig = "-";
+
+          try {
+            const empDoc = await db.collection("employees").doc(entry.userId).get();
+            if (empDoc.exists) {
+              const emp = empDoc.data();
+              empName = emp.name || "Unknown";
+              empDesig = emp.designation || "-";
+            }
+          } catch (err) {
+            console.warn(`Error fetching employee ${entry.userId}:`, err);
+          }
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${empName}</td>
+            <td>${empDesig}</td>
+            <td>${entry.date || "-"}</td>
+            <td>${formatTime(entry.time)}</td>
+            <td>${entry.valid ? "Yes" : "No"}</td>
+          `;
+          attendanceBody.appendChild(row);
+        }
+      } catch (err) {
+        console.error("Failed to load attendance:", err);
+        attendanceBody.innerHTML = `<tr><td colspan="5">Error loading attendance.</td></tr>`;
+      }
+    }
+
+    window.onload = loadAttendance;
+
+    // Download attendance as Excel
+    document.getElementById("downloadBtn").addEventListener("click", async () => {
+      try {
+        const attendanceSnap = await db.collection("attendance").orderBy("date", "desc").get();
+        const records = [];
+
+        for (const doc of attendanceSnap.docs) {
+          const entry = doc.data();
+          let empName = "Unknown";
+          let empDesig = "-";
+
+          try {
+            const empDoc = await db.collection("employees").doc(entry.userId).get();
+            if (empDoc.exists) {
+              const emp = empDoc.data();
+              empName = emp.name || "Unknown";
+              empDesig = emp.designation || "-";
+            }
+          } catch (err) {
+            console.warn(`Error fetching employee ${entry.userId}:`, err);
+          }
+
+          records.push({
+            Name: empName,
+            Designation: empDesig,
+            Date: entry.date || "-",
+            Time: formatTime(entry.location?.time),
+            ValidLocation: entry.valid ? "Yes" : "No"
+          });
+        }
+
+        if (records.length === 0) {
+          alert("No attendance records to download.");
+          return;
+        }
+
+        const worksheet = XLSX.utils.json_to_sheet(records);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+
+        XLSX.writeFile(workbook, "attendance.xlsx");
+      } catch (err) {
+        console.error("Error generating Excel:", err);
+        alert("Failed to download Excel.");
+      }
+    });
+  </script>
+</body>
+</html>
